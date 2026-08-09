@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --navy:    #1a2747;
+    --navy-2:  #1e2f55;
+    --navy-3:  #243362;
+    --surface: #ffffff;
+    --bg:      #dff3f8;
+    --border:  #e2e8f4;
+    --muted:   #6b7a99;
+    --text:    #1a2747;
+    --accent:  #2563eb;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    @apply antialiased min-h-screen;
+    background-color: #dff3f8;
+  }
+}
+
+/* ── Core card utility ── */
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f4;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(26, 39, 71, 0.06);
+}
+
+.card-hover {
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.card-hover:hover {
+  box-shadow: 0 6px 24px rgba(26, 39, 71, 0.12);
+  transform: translateY(-2px);
+}
+
+/* ── Keep glass-panel as alias to card for backward compat ── */
+.glass-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f4;
+  box-shadow: 0 2px 12px rgba(26, 39, 71, 0.06);
+}
+
+/* ── Category gradient tiles ── */
+.tile-purple { background: linear-gradient(135deg, #7c3aed, #6366f1); }
+.tile-teal   { background: linear-gradient(135deg, #0d9488, #06b6d4); }
+.tile-pink   { background: linear-gradient(135deg, #e11d48, #f43f5e); }
+.tile-blue   { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
+.tile-amber  { background: linear-gradient(135deg, #b45309, #f59e0b); }
+.tile-emerald{ background: linear-gradient(135deg, #047857, #10b981); }
+
+/* ── Sidebar ── */
+.sidebar {
+  background: var(--navy);
+  width: 220px;
+  min-width: 220px;
+  flex-shrink: 0;
+}
+
+/* ── Input styles ── */
+.input-light {
+  background: #f8faff;
+  border: 1.5px solid #e2e8f4;
+  border-radius: 10px;
+  color: #1a2747;
+  padding: 10px 14px;
+  font-size: 14px;
+  width: 100%;
+  transition: border-color 0.2s;
+  outline: none;
+}
+.input-light:focus {
+  border-color: #2563eb;
+}
+.input-light::placeholder {
+  color: #9ba8c4;
+}
+
+/* ── Badge ── */
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+/* ── Glow helpers (kept for alert banners) ── */
+.glow-indigo { box-shadow: 0 0 20px -5px rgba(99,102,241,0.45); }
+.glow-rose   { box-shadow: 0 0 20px -5px rgba(239,68,68,0.5);   }
+.glow-emerald{ box-shadow: 0 0 20px -5px rgba(16,185,129,0.45); }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #e2e8f4; }
+::-webkit-scrollbar-thumb { background: #c0ccdf; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #2563eb; }
+
+/* ── Animations ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-up 0.3s ease both; }
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.animate-spin-slow { animation: spin-slow 8s linear infinite; }

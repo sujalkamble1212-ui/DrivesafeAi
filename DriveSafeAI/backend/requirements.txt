@@ -1,0 +1,14 @@
+Flask==3.0.2
+Flask-RESTful==0.3.10
+Flask-SQLAlchemy==3.1.1
+Flask-CORS==4.0.0
+Flask-JWT-Extended==4.6.0
+bcrypt==4.1.2
+tensorflow>=2.15.0
+opencv-python-headless>=4.9.0
+mediapipe==0.10.14
+ultralytics>=8.1.0
+reportlab>=4.1.0
+numpy>=1.26.0
+pillow>=10.2.0
+python-dotenv>=1.0.0
