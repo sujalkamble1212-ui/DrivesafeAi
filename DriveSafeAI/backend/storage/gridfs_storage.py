@@ -37,7 +37,7 @@ def _get_gridfs() -> GridFS:
     return _gridfs
 
 
-def save_file(data: bytes, filename: str, content_type: str = "application/octet-stream") -> str:
+def save_file(data: bytes, filename: str, content_type: str = "application/octet-stream", file_id: str | ObjectId | None = None) -> str:
     """
     Save bytes to GridFS.
 
@@ -45,19 +45,26 @@ def save_file(data: bytes, filename: str, content_type: str = "application/octet
         data         : Raw bytes of the file.
         filename     : Human-readable filename stored in GridFS metadata.
         content_type : MIME type (e.g. 'image/jpeg', 'application/pdf').
+        file_id      : Optional pre-generated ObjectId or hex string to use as _id.
 
     Returns:
         str — the GridFS file_id as a hex string, to be stored in MongoDB.
     """
     try:
         fs = _get_gridfs()
-        file_id = fs.put(
+        kwargs = {
+            "filename": filename,
+            "content_type": content_type,
+        }
+        if file_id is not None:
+            kwargs["_id"] = ObjectId(file_id) if isinstance(file_id, str) else file_id
+
+        actual_id = fs.put(
             io.BytesIO(data),
-            filename=filename,
-            content_type=content_type,
+            **kwargs,
         )
-        logger.debug("Saved %s to GridFS as %s", filename, str(file_id))
-        return str(file_id)
+        logger.debug("Saved %s to GridFS as %s", filename, str(actual_id))
+        return str(actual_id)
     except Exception as exc:
         logger.error("GridFS save error for %s: %s", filename, exc)
         raise exc

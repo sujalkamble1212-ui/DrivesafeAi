@@ -42,7 +42,7 @@ WORKDIR /app
 
 # ── Python dependencies ───────────────────────────────────────────────────────
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Backend application code ──────────────────────────────────────────────────
 COPY backend/ ./

@@ -28,7 +28,7 @@ def _is_gridfs_id(value: str) -> bool:
 
 
 @screenshots_bp.route("/<string:file_ref>", methods=["GET"])
-@jwt_required()
+@jwt_required(optional=True)
 def get_screenshot(file_ref: str):
     """
     Stream a screenshot image.

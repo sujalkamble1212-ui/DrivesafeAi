@@ -22,8 +22,11 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.graphics import renderPDF
 
-from config import REPORTS_DIR
-from storage.gridfs_storage import save_file as gridfs_save_file
+from config import REPORTS_DIR, SCREENSHOTS_DIR
+from storage.gridfs_storage import (
+    save_file as gridfs_save_file,
+    load_file as gridfs_load_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -534,25 +537,45 @@ class ReportGenerator:
 
     def _build_screenshots(self, alerts):
         elements = []
-        shots = [a for a in alerts
-                 if a.get("screenshot_path") and os.path.exists(a["screenshot_path"])]
+        shots = [a for a in alerts if a.get("screenshot_path")]
 
         if not shots:
             return elements
 
-        elements.append(Paragraph("Alert Screenshots", self._styles["SectionHdr"]))
-        elements.append(HRFlowable(width="100%", thickness=1,
-                                   color=LIGHT_LINE, spaceAfter=8))
-        elements.append(Paragraph(
-            "%d screenshot(s) captured automatically at alert moments." % len(shots),
-            ParagraphStyle("sc", fontSize=8, fontName="Helvetica",
-                           textColor=TEXT_LIGHT, leading=12, spaceAfter=6)
-        ))
+        def _is_hex24(val):
+            return bool(val) and len(val) == 24 and all(c in "0123456789abcdefABCDEF" for c in val)
 
         row = []
-        for alert in shots[:12]:
+        count = 0
+        for alert in shots:
+            if count >= 12:
+                break
             try:
-                img = Image(alert["screenshot_path"], width=7.5 * cm, height=5 * cm)
+                shot_ref = str(alert.get("screenshot_path", ""))
+                img = None
+
+                # 1. Check GridFS
+                if _is_hex24(shot_ref):
+                    try:
+                        raw_bytes, _, _ = gridfs_load_file(shot_ref)
+                        img = Image(io.BytesIO(raw_bytes), width=7.5 * cm, height=5 * cm)
+                    except Exception:
+                        img = None
+
+                # 2. Check direct file path
+                if img is None and os.path.isfile(shot_ref):
+                    img = Image(shot_ref, width=7.5 * cm, height=5 * cm)
+
+                # 3. Check SCREENSHOTS_DIR by basename
+                if img is None:
+                    local_cand = os.path.join(SCREENSHOTS_DIR, os.path.basename(shot_ref))
+                    if os.path.isfile(local_cand):
+                        img = Image(local_cand, width=7.5 * cm, height=5 * cm)
+
+                if img is None:
+                    continue
+
+                count += 1
                 ts  = alert.get("timestamp", "")[:19].replace("T", "  ")
                 sev = alert.get("severity", "warning").upper()
                 cap = Paragraph(
@@ -584,7 +607,7 @@ class ReportGenerator:
                     elements.append(Spacer(1, 0.25 * cm))
                     row = []
             except Exception as exc:
-                logger.warning("Screenshot embed error: %s" % exc)
+                logger.warning("Screenshot embed error: %s", exc)
 
         if row:
             pad = [""] if len(row) == 1 else []
@@ -595,7 +618,20 @@ class ReportGenerator:
             ]))
             elements.append(grid)
 
-        elements.append(Spacer(1, 0.4 * cm))
+        if elements:
+            # Header prepended if we actually embedded any screenshots
+            hdr = [
+                Paragraph("Alert Screenshots", self._styles["SectionHdr"]),
+                HRFlowable(width="100%", thickness=1, color=LIGHT_LINE, spaceAfter=8),
+                Paragraph(
+                    "%d screenshot(s) captured automatically at alert moments." % count,
+                    ParagraphStyle("sc", fontSize=8, fontName="Helvetica",
+                                   textColor=TEXT_LIGHT, leading=12, spaceAfter=6)
+                ),
+            ]
+            elements = hdr + elements
+            elements.append(Spacer(1, 0.4 * cm))
+
         return elements
 
     # --- Public: generate() ---

@@ -329,6 +329,10 @@ class AlertManager:
         Falls back to local disk if GridFS save fails.
         """
         try:
+            from bson import ObjectId
+            oid = ObjectId()
+            file_id_str = str(oid)
+
             ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"alert_{session_id}_{alert_type}_{ts}.jpg"
 
@@ -341,26 +345,26 @@ class AlertManager:
 
             img_bytes = buf.tobytes()
 
-            # Try to save to GridFS (async so it doesn't block the frame loop)
+            # Always write local copy to SCREENSHOTS_DIR for quick local access/fallback
+            try:
+                filepath = os.path.join(SCREENSHOTS_DIR, filename)
+                cv2.imwrite(filepath, frame,
+                            [int(cv2.IMWRITE_JPEG_QUALITY), DetectionConfig.SCREENSHOT_QUALITY])
+            except Exception as exc_local:
+                logger.debug("Local screenshot write note: %s", exc_local)
+
+            # Save to GridFS asynchronously with the pre-allocated ObjectId
             def _async_gridfs_save():
                 try:
-                    file_id = gridfs_save_file(img_bytes, filename, content_type="image/jpeg")
-                    logger.debug("Screenshot saved to GridFS: %s -> %s", filename, file_id)
+                    gridfs_save_file(img_bytes, filename, content_type="image/jpeg", file_id=oid)
+                    logger.debug("Screenshot saved to GridFS: %s -> %s", filename, file_id_str)
                 except Exception as exc:
                     logger.error("GridFS screenshot save failed: %s", exc)
-                    # Fallback: write to local disk
-                    try:
-                        filepath = os.path.join(SCREENSHOTS_DIR, filename)
-                        cv2.imwrite(filepath, frame,
-                                    [int(cv2.IMWRITE_JPEG_QUALITY), DetectionConfig.SCREENSHOT_QUALITY])
-                    except Exception as exc2:
-                        logger.error("Local screenshot fallback also failed: %s", exc2)
 
             threading.Thread(target=_async_gridfs_save, daemon=True).start()
 
-            # Return a placeholder path — will be replaced with the real GridFS ID
-            # by the caller if needed. For now we return a predictable identifier.
-            return f"gridfs:{filename}"
+            # Return the real 24-character hex GridFS ID
+            return file_id_str
         except Exception as exc:
             logger.error("Screenshot setup error: %s", exc)
             return None

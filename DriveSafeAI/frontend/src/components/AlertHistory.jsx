@@ -64,7 +64,13 @@ export const AlertHistory = ({ alerts = [] }) => {
               </span>
               {/* Screenshot */}
               {alert.screenshot_path ? (
-                <a href={`/${alert.screenshot_path.replace(/\\/g, '/')}`}
+                <a href={
+                     alert.screenshot_path.startsWith('http')
+                       ? alert.screenshot_path
+                       : alert.screenshot_path.startsWith('screenshots/')
+                         ? `/${alert.screenshot_path.replace(/\\/g, '/')}`
+                         : `/api/screenshots/${alert.screenshot_path}`
+                   }
                    target="_blank" rel="noreferrer"
                    className="flex items-center gap-1 text-xs font-semibold shrink-0"
                    style={{ color: '#2563eb' }}>
