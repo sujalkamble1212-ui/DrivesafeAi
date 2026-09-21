@@ -1,0 +1,34 @@
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/*.egg-info
+
+# Node
+frontend/node_modules
+node_modules
+
+# Dev/test files
+backend/test_*.py
+backend/database.db
+backend/database.db-shm
+backend/database.db-wal
+
+# Secrets (never bake into image)
+backend/.env
+**/.env.local
+**/.env.*.local
+
+# Git & IDE
+.git
+.gitignore
+**/.DS_Store
+**/.vscode
+**/.idea
+
+# Logs
+**/*.log
+
+# Already-built frontend (Docker does a fresh build from source)
+frontend/dist
