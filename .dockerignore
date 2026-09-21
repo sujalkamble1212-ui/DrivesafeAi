@@ -1,0 +1,15 @@
+﻿.git
+.gitignore
+.env
+*.env
+**/.env
+venv/
+train/
+DriveSafeAI/frontend/node_modules/
+DriveSafeAI/frontend/dist/
+DriveSafeAI/backend/__pycache__/
+DriveSafeAI/backend/screenshots/*.jpg
+DriveSafeAI/backend/reports/*.pdf
+*.pyc
+*.pyo
+__pycache__
