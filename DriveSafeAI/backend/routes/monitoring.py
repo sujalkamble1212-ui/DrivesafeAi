@@ -17,7 +17,6 @@ from datetime import datetime
 from flask              import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from extensions          import db
 from models.session      import DrivingSession
 from models.alert        import Alert
 from models.user         import User, UserSettings
@@ -97,19 +96,18 @@ def start_session():
     Start a new driving session for the authenticated user.
     Returns the new session ID.
     """
-    user_id = int(get_jwt_identity())
+    user_id = str(get_jwt_identity())
     data    = request.get_json(silent=True) or {}
     frame_b64 = data.get("frame_data", "")
 
     # Mark any previously active sessions as ended
-    active = DrivingSession.query.filter_by(user_id=user_id, is_active=True).all()
-    for s in active:
-        s.is_active = False
-        s.end_time  = datetime.utcnow()
+    DrivingSession.objects(user_id=user_id, is_active=True).update(
+        is_active=False,
+        end_time=datetime.utcnow()
+    )
 
     session_obj = DrivingSession(user_id=user_id)
-    db.session.add(session_obj)
-    db.session.commit()
+    session_obj.save()
 
     # Reset all detection state
     managers = current_app.detection_managers
@@ -120,20 +118,20 @@ def start_session():
     managers["alert"].reset_session()
 
     # Apply voice alert setting from user preferences
-    settings = UserSettings.query.filter_by(user_id=user_id).first()
+    settings = UserSettings.objects(user_id=user_id).first()
     if settings:
         managers["alert"].set_voice_enabled(settings.voice_alerts_enabled)
 
     if frame_b64:
         frame = _decode_frame(frame_b64)
         if frame is not None:
-            managers["alert"].check_session_start_screenshot(frame, session_obj.id)
+            managers["alert"].check_session_start_screenshot(frame, str(session_obj.id))
         else:
             logger.warning("Session start screenshot skipped because frame data was invalid.")
 
     return jsonify({
         "message":    "Session started.",
-        "session_id": session_obj.id,
+        "session_id": str(session_obj.id),
     }), 201
 
 
@@ -148,11 +146,15 @@ def end_session():
     End the active session, compute final scores.
     Body: { session_id }
     """
-    user_id = int(get_jwt_identity())
+    user_id = str(get_jwt_identity())
     data    = request.get_json(silent=True) or {}
-    sid     = data.get("session_id")
+    sid     = str(data.get("session_id", ""))
 
-    session_obj = DrivingSession.query.filter_by(id=sid, user_id=user_id).first()
+    try:
+        session_obj = DrivingSession.objects(id=sid, user_id=user_id).first()
+    except Exception:
+        session_obj = None
+
     if not session_obj:
         return jsonify({"error": "Session not found."}), 404
 
@@ -169,12 +171,12 @@ def end_session():
     session_obj.total_alerts = alert_count
 
     # Count events from saved alerts
-    session_alerts = Alert.query.filter_by(session_id=sid).all()
+    session_alerts = Alert.objects(session_id=sid)
     session_obj.eye_closure_count  = sum(1 for a in session_alerts if a.alert_type == "drowsiness")
     session_obj.yawn_count         = sum(1 for a in session_alerts if a.alert_type == "yawn_detected")
     session_obj.phone_usage_count  = sum(1 for a in session_alerts if a.alert_type == "phone_detected")
 
-    db.session.commit()
+    session_obj.save()
 
     return jsonify({
         "message": "Session ended.",
@@ -208,11 +210,11 @@ def process_frame():
           alerts_fired:    list[str]
         }
     """
-    user_id = int(get_jwt_identity())
+    user_id = str(get_jwt_identity())
     data    = request.get_json(silent=True) or {}
 
     frame_b64  = data.get("frame_data", "")
-    session_id = data.get("session_id")
+    session_id = str(data.get("session_id", ""))
 
     if not frame_b64:
         return jsonify({"error": "frame_data is required."}), 400
@@ -220,7 +222,11 @@ def process_frame():
     if not session_id:
         return jsonify({"error": "Active session is required."}), 400
 
-    session_obj = DrivingSession.query.filter_by(id=session_id, user_id=user_id, is_active=True).first()
+    try:
+        session_obj = DrivingSession.objects(id=session_id, user_id=user_id, is_active=True).first()
+    except Exception:
+        session_obj = None
+
     if not session_obj:
         return jsonify({"error": "No active session found."}), 400
 
@@ -321,11 +327,14 @@ def process_frame():
 
     # ── Update session scores live ─────────────
     if session_id:
-        session_obj = DrivingSession.query.get(session_id)
-        if session_obj and session_obj.is_active:
-            session_obj.safety_score    = safety
-            session_obj.attention_score = attention
-            db.session.commit()
+        try:
+            session_obj = DrivingSession.objects(id=session_id).first()
+            if session_obj and session_obj.is_active:
+                session_obj.safety_score    = safety
+                session_obj.attention_score = attention
+                session_obj.save()
+        except Exception:
+            pass
 
     # ── Calculate face bounding box from landmarks or Haar Cascade ──────
     face_bbox = None
@@ -382,13 +391,13 @@ def process_frame():
 # Save Alert (internal helper)
 # ─────────────────────────────────────────────
 
-def _save_alert(user_id: int, session_id: int, alert_data: dict,
+def _save_alert(user_id: str, session_id: str, alert_data: dict,
                 eye_res: dict, head_res: dict) -> None:
     """Persist an alert record to the database."""
     try:
         alert = Alert(
-            session_id      = session_id,
-            user_id         = user_id,
+            session_id      = str(session_id),
+            user_id         = str(user_id),
             alert_type      = alert_data["alert_type"],
             severity        = alert_data["severity"],
             message         = alert_data["message"],
@@ -397,11 +406,9 @@ def _save_alert(user_id: int, session_id: int, alert_data: dict,
             head_pose       = head_res.get("direction"),
             confidence      = alert_data.get("confidence"),
         )
-        db.session.add(alert)
-        db.session.commit()
+        alert.save()
     except Exception as exc:
         logger.error(f"Alert save error: {exc}")
-        db.session.rollback()
 
 
 # ─────────────────────────────────────────────
@@ -415,10 +422,10 @@ def save_alert():
     Manually save an alert (e.g., client-side detected event).
     Body: { session_id, alert_type, message?, severity? }
     """
-    user_id = int(get_jwt_identity())
+    user_id = str(get_jwt_identity())
     data    = request.get_json(silent=True) or {}
 
-    session_id = data.get("session_id")
+    session_id = str(data.get("session_id", ""))
     alert_type = data.get("alert_type", "unknown")
     message    = data.get("message", "")
     severity   = data.get("severity", "warning")
@@ -430,8 +437,7 @@ def save_alert():
         message    = message,
         severity   = severity,
     )
-    db.session.add(alert)
-    db.session.commit()
+    alert.save()
 
     return jsonify({
         "message": "Alert saved.",

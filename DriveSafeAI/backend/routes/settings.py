@@ -9,8 +9,7 @@ Endpoints:
 from flask              import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from extensions      import db
-from models.user     import UserSettings
+from models.user import UserSettings
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/api/settings")
 
@@ -21,14 +20,13 @@ VALID_SENSITIVITIES = {"low", "medium", "high"}
 @jwt_required()
 def get_settings():
     """Return current user settings."""
-    user_id  = int(get_jwt_identity())
-    settings = UserSettings.query.filter_by(user_id=user_id).first()
+    user_id  = str(get_jwt_identity())
+    settings = UserSettings.objects(user_id=user_id).first()
 
     if not settings:
         # Create defaults on-the-fly if somehow missing
         settings = UserSettings(user_id=user_id)
-        db.session.add(settings)
-        db.session.commit()
+        settings.save()
 
     return jsonify({"settings": settings.to_dict()}), 200
 
@@ -46,13 +44,12 @@ def update_settings():
         dark_mode            : bool,
       }
     """
-    user_id  = int(get_jwt_identity())
+    user_id  = str(get_jwt_identity())
     data     = request.get_json(silent=True) or {}
-    settings = UserSettings.query.filter_by(user_id=user_id).first()
+    settings = UserSettings.objects(user_id=user_id).first()
 
     if not settings:
         settings = UserSettings(user_id=user_id)
-        db.session.add(settings)
 
     if "voice_alerts_enabled" in data:
         settings.voice_alerts_enabled = bool(data["voice_alerts_enabled"])
@@ -68,7 +65,7 @@ def update_settings():
     if "dark_mode" in data:
         settings.dark_mode = bool(data["dark_mode"])
 
-    db.session.commit()
+    settings.save()
 
     return jsonify({
         "message":  "Settings updated.",

@@ -15,8 +15,7 @@ from flask_jwt_extended import (
     jwt_required, get_jwt_identity
 )
 
-from extensions          import db
-from models.user         import User, UserSettings
+from models.user import User, UserSettings
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -45,22 +44,21 @@ def register():
     if len(password) < 6:
         return jsonify({"error": "Password must be at least 6 characters."}), 400
 
-    if User.query.filter_by(username=username).first():
+    if User.objects(username=username).first():
         return jsonify({"error": "Username already taken."}), 409
 
-    if User.query.filter_by(email=email).first():
+    if User.objects(email=email).first():
         return jsonify({"error": "Email already registered."}), 409
 
     # Create user
     user = User(username=username, email=email, full_name=full_name)
     user.set_password(password)
-    db.session.add(user)
-    db.session.flush()  # get user.id before commit
+    user.save()
 
     # Create default settings
-    settings = UserSettings(user_id=user.id)
-    db.session.add(settings)
-    db.session.commit()
+    settings = UserSettings(user_id=str(user.id))
+    settings.save()
+
     # Issue tokens
     access_token  = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
@@ -91,8 +89,8 @@ def login():
         return jsonify({"error": "username/email and password required."}), 400
 
     # Find user by username or email
-    user = (User.query.filter_by(username=identity).first() or
-            User.query.filter_by(email=identity.lower()).first())
+    user = (User.objects(username=identity).first() or
+            User.objects(email=identity.lower()).first())
 
     if not user or not user.check_password(password):
         return jsonify({"error": "Invalid credentials."}), 401
@@ -131,8 +129,15 @@ def logout():
 @jwt_required()
 def get_profile():
     """Return current authenticated user's profile."""
-    user_id = int(get_jwt_identity())
-    user    = User.query.get_or_404(user_id)
+    user_id = str(get_jwt_identity())
+    try:
+        user = User.objects(id=user_id).first()
+    except Exception:
+        user = None
+
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
     return jsonify({"user": user.to_dict()}), 200
 
 
@@ -147,9 +152,16 @@ def update_profile():
     Update user profile.
     Body: { full_name?, email?, current_password?, new_password? }
     """
-    user_id = int(get_jwt_identity())
-    user    = User.query.get_or_404(user_id)
-    data    = request.get_json(silent=True) or {}
+    user_id = str(get_jwt_identity())
+    try:
+        user = User.objects(id=user_id).first()
+    except Exception:
+        user = None
+
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    data = request.get_json(silent=True) or {}
 
     # Update full_name
     if "full_name" in data:
@@ -158,8 +170,8 @@ def update_profile():
     # Update email
     if "email" in data:
         new_email = data["email"].strip().lower()
-        existing  = User.query.filter_by(email=new_email).first()
-        if existing and existing.id != user.id:
+        existing  = User.objects(email=new_email).first()
+        if existing and str(existing.id) != str(user.id):
             return jsonify({"error": "Email already in use."}), 409
         user.email = new_email
 
@@ -172,7 +184,7 @@ def update_profile():
             return jsonify({"error": "New password must be at least 6 characters."}), 400
         user.set_password(data["new_password"])
 
-    db.session.commit()
+    user.save()
     return jsonify({
         "message": "Profile updated.",
         "user":    user.to_dict(),

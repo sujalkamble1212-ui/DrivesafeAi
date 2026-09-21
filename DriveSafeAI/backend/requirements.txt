@@ -12,3 +12,5 @@ reportlab>=4.1.0
 numpy>=1.26.0
 pillow>=10.2.0
 python-dotenv>=1.0.0
+mongoengine>=0.29.0
+dnspython>=2.6.0

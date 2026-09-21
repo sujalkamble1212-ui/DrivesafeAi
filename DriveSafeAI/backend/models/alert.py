@@ -1,42 +1,43 @@
 """
-DriveSafe AI — Alert SQLAlchemy Model
+DriveSafe AI — Alert MongoEngine Model
 """
 
 from datetime import datetime
-from extensions import db
+from mongoengine import (
+    Document, StringField, DateTimeField, FloatField
+)
 
 
-class Alert(db.Model):
-    __tablename__ = "alerts"
+class Alert(Document):
+    meta = {
+        "collection": "alerts",
+        "indexes": [
+            "session_id",
+            "user_id",
+            "-timestamp",
+            ("session_id", "-timestamp")
+        ]
+    }
 
-    id              = db.Column(db.Integer, primary_key=True)
-    session_id      = db.Column(db.Integer, db.ForeignKey("driving_sessions.id"), nullable=False)
-    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"),            nullable=False)
+    session_id      = StringField(required=True)
+    user_id         = StringField(required=True)
 
     # Alert metadata
-    alert_type      = db.Column(db.String(50),  nullable=False)
-    # Possible values:
-    #   "drowsiness"       – eyes closed too long
-    #   "distraction"      – looking away too long
-    #   "phone_detected"   – phone in frame
-    #   "yawn_detected"    – yawning
+    alert_type      = StringField(required=True, max_length=50)
+    severity        = StringField(default="warning", max_length=10)
+    message         = StringField(max_length=500, null=True)
+    screenshot_path = StringField(max_length=500, null=True)
 
-    severity        = db.Column(db.String(10),  default="warning")
-    # "info" | "warning" | "danger"
-
-    message         = db.Column(db.String(500), nullable=True)
-    screenshot_path = db.Column(db.String(500), nullable=True)
-
-    timestamp       = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp       = DateTimeField(default=datetime.utcnow)
 
     # Detection details at time of alert
-    eye_status      = db.Column(db.String(20), nullable=True)
-    head_pose       = db.Column(db.String(30), nullable=True)
-    confidence      = db.Column(db.Float,      nullable=True)
+    eye_status      = StringField(max_length=20, null=True)
+    head_pose       = StringField(max_length=30, null=True)
+    confidence      = FloatField(null=True)
 
     def to_dict(self) -> dict:
         return {
-            "id":              self.id,
+            "id":              str(self.id),
             "session_id":      self.session_id,
             "user_id":         self.user_id,
             "alert_type":      self.alert_type,

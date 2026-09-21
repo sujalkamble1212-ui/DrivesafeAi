@@ -35,8 +35,8 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
     # Database
-    SQLALCHEMY_DATABASE_URI    = f"sqlite:///{os.path.join(BASE_DIR, 'database.db')}"
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/drivesafe_ai")
+    MONGODB_DB  = os.environ.get("MONGODB_DB", "drivesafe_ai")
 
     # CORS
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")

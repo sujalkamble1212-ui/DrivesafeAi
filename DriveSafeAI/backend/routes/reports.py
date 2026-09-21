@@ -9,10 +9,9 @@ Endpoints:
 import os
 import logging
 
-from flask              import Blueprint, request, jsonify, send_file, current_app
+from flask              import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from extensions          import db
 from models.session      import DrivingSession
 from models.alert        import Alert
 from models.user         import User
@@ -25,19 +24,29 @@ reports_bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 _generator = ReportGenerator()
 
 
-@reports_bp.route("/<int:session_id>", methods=["GET"])
+@reports_bp.route("/<string:session_id>", methods=["GET"])
 @jwt_required()
-def get_report(session_id: int):
+def get_report(session_id: str):
     """
     Generate (if not cached) and stream the PDF report for a session.
     """
-    user_id = int(get_jwt_identity())
+    user_id = str(get_jwt_identity())
 
-    session_obj = DrivingSession.query.filter_by(
-        id=session_id, user_id=user_id
-    ).first_or_404()
+    try:
+        session_obj = DrivingSession.objects(id=session_id, user_id=user_id).first()
+    except Exception:
+        session_obj = None
 
-    user = User.query.get_or_404(user_id)
+    if not session_obj:
+        return jsonify({"error": "Session not found."}), 404
+
+    try:
+        user = User.objects(id=user_id).first()
+    except Exception:
+        user = None
+
+    if not user:
+        return jsonify({"error": "User not found."}), 404
 
     # Return cached report if it exists and file is on disk
     if session_obj.report_path and os.path.exists(session_obj.report_path):
@@ -49,12 +58,7 @@ def get_report(session_id: int):
         )
 
     # Gather alerts for this session
-    alerts = (
-        Alert.query
-        .filter_by(session_id=session_id)
-        .order_by(Alert.timestamp.asc())
-        .all()
-    )
+    alerts = Alert.objects(session_id=str(session_id)).order_by("+timestamp")
 
     # Generate PDF
     try:
@@ -69,7 +73,7 @@ def get_report(session_id: int):
 
     # Cache path in DB
     session_obj.report_path = pdf_path
-    db.session.commit()
+    session_obj.save()
 
     return send_file(
         pdf_path,
@@ -79,15 +83,19 @@ def get_report(session_id: int):
     )
 
 
-@reports_bp.route("/<int:session_id>/status", methods=["GET"])
+@reports_bp.route("/<string:session_id>/status", methods=["GET"])
 @jwt_required()
-def report_status(session_id: int):
+def report_status(session_id: str):
     """Check whether a PDF report has been generated for a session."""
-    user_id = int(get_jwt_identity())
+    user_id = str(get_jwt_identity())
 
-    session_obj = DrivingSession.query.filter_by(
-        id=session_id, user_id=user_id
-    ).first_or_404()
+    try:
+        session_obj = DrivingSession.objects(id=session_id, user_id=user_id).first()
+    except Exception:
+        session_obj = None
+
+    if not session_obj:
+        return jsonify({"error": "Session not found."}), 404
 
     has_report = bool(
         session_obj.report_path and

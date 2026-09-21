@@ -11,7 +11,7 @@ from flask import Flask, send_from_directory
 from flask_cors import CORS
 
 from config import Config, SCREENSHOTS_DIR
-from extensions import db, jwt
+from extensions import init_db, jwt
 from routes.auth import auth_bp
 from routes.monitoring import monitor_bp
 from routes.sessions import sessions_bp
@@ -38,7 +38,7 @@ def create_app():
     app.config.from_object(Config)
 
     # Initialize Extensions
-    db.init_app(app)
+    init_db(app)
     jwt.init_app(app)
     CORS(app, origins=Config.CORS_ORIGINS, supports_credentials=True)
 
@@ -54,11 +54,6 @@ def create_app():
     @app.route("/screenshots/<path:filename>")
     def serve_screenshot(filename):
         return send_from_directory(SCREENSHOTS_DIR, filename)
-
-    # Initialize AI Detection Managers lazily / globally on app startup
-    with app.app_context():
-        db.create_all()
-        logger.info("✅ Database tables created/verified.")
 
     logger.info("Initializing AI Detection Models...")
     eye_detector   = EyeDetector()

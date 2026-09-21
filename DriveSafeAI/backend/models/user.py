@@ -1,28 +1,27 @@
 """
-DriveSafe AI — User SQLAlchemy Model
+DriveSafe AI — User MongoEngine Model
 """
 
 from datetime import datetime
-from extensions import db
 import bcrypt
+from mongoengine import (
+    Document, StringField, EmailField, DateTimeField,
+    BooleanField, IntField
+)
 
 
-class User(db.Model):
-    __tablename__ = "users"
+class User(Document):
+    meta = {
+        "collection": "users",
+        "indexes": ["username", "email"]
+    }
 
-    id           = db.Column(db.Integer, primary_key=True)
-    username     = db.Column(db.String(80),  unique=True, nullable=False, index=True)
-    email        = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(128), nullable=False)
-    full_name    = db.Column(db.String(120), nullable=True)
-    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at   = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    sessions     = db.relationship("DrivingSession", backref="user", lazy=True,
-                                   cascade="all, delete-orphan")
-    settings     = db.relationship("UserSettings",   backref="user", lazy=True,
-                                   uselist=False,    cascade="all, delete-orphan")
+    username      = StringField(required=True, unique=True, max_length=80)
+    email         = EmailField(required=True, unique=True, max_length=120)
+    password_hash = StringField(required=True, max_length=128)
+    full_name     = StringField(max_length=120, default="")
+    created_at    = DateTimeField(default=datetime.utcnow)
+    updated_at    = DateTimeField(default=datetime.utcnow)
 
     # ──────────────────────────────────────────
     # Password helpers
@@ -46,7 +45,7 @@ class User(db.Model):
 
     def to_dict(self) -> dict:
         return {
-            "id":         self.id,
+            "id":         str(self.id),
             "username":   self.username,
             "email":      self.email,
             "full_name":  self.full_name,
@@ -57,25 +56,27 @@ class User(db.Model):
         return f"<User {self.username}>"
 
 
-class UserSettings(db.Model):
-    __tablename__ = "user_settings"
+class UserSettings(Document):
+    meta = {
+        "collection": "user_settings",
+        "indexes": ["user_id"]
+    }
 
-    id                   = db.Column(db.Integer, primary_key=True)
-    user_id              = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True)
+    user_id              = StringField(required=True, unique=True)
 
     # Voice alerts
-    voice_alerts_enabled = db.Column(db.Boolean, default=True)
+    voice_alerts_enabled = BooleanField(default=True)
 
     # Detection
-    sensitivity          = db.Column(db.String(10), default="medium")  # low / medium / high
+    sensitivity          = StringField(default="medium", max_length=10)  # low / medium / high
 
     # Camera
-    camera_index         = db.Column(db.Integer,  default=0)
+    camera_index         = IntField(default=0)
 
     # UI
-    dark_mode            = db.Column(db.Boolean, default=True)
+    dark_mode            = BooleanField(default=True)
 
-    updated_at           = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at           = DateTimeField(default=datetime.utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -84,3 +85,6 @@ class UserSettings(db.Model):
             "camera_index":         self.camera_index,
             "dark_mode":            self.dark_mode,
         }
+
+    def __repr__(self) -> str:
+        return f"<UserSettings user={self.user_id}>"
