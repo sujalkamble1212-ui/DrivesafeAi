@@ -5,6 +5,7 @@ Generates a clean, professional PDF driving-safety report
 for a completed session using ReportLab.
 """
 
+import io
 import os
 import logging
 from datetime import datetime
@@ -22,6 +23,7 @@ from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.graphics import renderPDF
 
 from config import REPORTS_DIR
+from storage.gridfs_storage import save_file as gridfs_save_file
 
 logger = logging.getLogger(__name__)
 
@@ -602,20 +604,28 @@ class ReportGenerator:
         """
         Generate a PDF report for the session.
 
+        Builds the PDF into an in-memory buffer, saves it to MongoDB GridFS
+        for cloud persistence, and returns the GridFS file_id string.
+
+        Falls back to local disk if GridFS is unavailable.
+
         Args:
             session : DrivingSession.to_dict()
             user    : User.to_dict()
             alerts  : list of Alert.to_dict()
 
         Returns:
-            Absolute path to the generated PDF file.
+            str — GridFS file_id (e.g. "67f3a1b2c8d4e5f600112233") stored in
+                   DrivingSession.report_path for later retrieval.
         """
         ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = "report_session_%s_%s.pdf" % (session["id"], ts)
-        filepath = os.path.join(REPORTS_DIR, filename)
+
+        # ── Build PDF into an in-memory buffer (no disk I/O needed) ──
+        pdf_buffer = io.BytesIO()
 
         doc = SimpleDocTemplate(
-            filepath,
+            pdf_buffer,
             pagesize=A4,
             leftMargin=1.5 * cm, rightMargin=1.5 * cm,
             topMargin=2.2 * cm,  bottomMargin=1.8 * cm,
@@ -635,5 +645,20 @@ class ReportGenerator:
         elements += self._build_screenshots(alert_shots)
 
         doc.build(elements, onFirstPage=self._on_page, onLaterPages=self._on_page)
-        logger.info("PDF report generated: %s" % filepath)
+        pdf_bytes = pdf_buffer.getvalue()
+        logger.info("PDF report built in memory: %s (%d bytes)", filename, len(pdf_bytes))
+
+        # ── Save to GridFS (primary) ──
+        try:
+            file_id = gridfs_save_file(pdf_bytes, filename, content_type="application/pdf")
+            logger.info("PDF report saved to GridFS: %s -> %s", filename, file_id)
+            return file_id
+        except Exception as exc:
+            logger.warning("GridFS save failed (%s), falling back to local disk.", exc)
+
+        # ── Fallback: write to local REPORTS_DIR ──
+        filepath = os.path.join(REPORTS_DIR, filename)
+        with open(filepath, "wb") as f:
+            f.write(pdf_bytes)
+        logger.info("PDF report saved locally (fallback): %s", filepath)
         return filepath

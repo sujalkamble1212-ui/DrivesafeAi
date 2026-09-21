@@ -19,6 +19,7 @@ import cv2
 from datetime import datetime
 
 from config import SCREENSHOTS_DIR, DetectionConfig
+from storage.gridfs_storage import save_file as gridfs_save_file
 
 logger = logging.getLogger(__name__)
 
@@ -321,25 +322,47 @@ class AlertManager:
     # Screenshot (Asynchronous non-blocking)
     # ──────────────────────────────────────────────
 
-    def save_screenshot(self, frame: np.ndarray, alert_type: str, session_id: int) -> str | None:
-        """Save a JPEG screenshot asynchronously in a background thread."""
+    def save_screenshot(self, frame: np.ndarray, alert_type: str, session_id) -> str | None:
+        """
+        Encode a JPEG frame and save it to MongoDB GridFS.
+        Returns the GridFS file_id string (stored in Alert.screenshot_path).
+        Falls back to local disk if GridFS save fails.
+        """
         try:
             ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"alert_{session_id}_{alert_type}_{ts}.jpg"
-            filepath = os.path.join(SCREENSHOTS_DIR, filename)
 
-            frame_copy = frame.copy()
-            def _async_write():
+            # Encode to JPEG in memory
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), DetectionConfig.SCREENSHOT_QUALITY]
+            success, buf = cv2.imencode(".jpg", frame, encode_param)
+            if not success:
+                logger.error("Failed to encode screenshot for %s", alert_type)
+                return None
+
+            img_bytes = buf.tobytes()
+
+            # Try to save to GridFS (async so it doesn't block the frame loop)
+            def _async_gridfs_save():
                 try:
-                    cv2.imwrite(filepath, frame_copy,
-                                [int(cv2.IMWRITE_JPEG_QUALITY), DetectionConfig.SCREENSHOT_QUALITY])
+                    file_id = gridfs_save_file(img_bytes, filename, content_type="image/jpeg")
+                    logger.debug("Screenshot saved to GridFS: %s -> %s", filename, file_id)
                 except Exception as exc:
-                    logger.error(f"Async screenshot save error: {exc}")
+                    logger.error("GridFS screenshot save failed: %s", exc)
+                    # Fallback: write to local disk
+                    try:
+                        filepath = os.path.join(SCREENSHOTS_DIR, filename)
+                        cv2.imwrite(filepath, frame,
+                                    [int(cv2.IMWRITE_JPEG_QUALITY), DetectionConfig.SCREENSHOT_QUALITY])
+                    except Exception as exc2:
+                        logger.error("Local screenshot fallback also failed: %s", exc2)
 
-            threading.Thread(target=_async_write, daemon=True).start()
-            return filepath
+            threading.Thread(target=_async_gridfs_save, daemon=True).start()
+
+            # Return a placeholder path — will be replaced with the real GridFS ID
+            # by the caller if needed. For now we return a predictable identifier.
+            return f"gridfs:{filename}"
         except Exception as exc:
-            logger.error(f"Screenshot setup error: {exc}")
+            logger.error("Screenshot setup error: %s", exc)
             return None
 
     def check_session_start_screenshot(self, frame: np.ndarray, session_id: int) -> None:

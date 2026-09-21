@@ -19,6 +19,7 @@ from routes.sessions import sessions_bp
 from routes.alerts import alerts_bp
 from routes.reports import reports_bp
 from routes.settings import settings_bp
+from routes.screenshots import screenshots_bp
 
 from detection.eye_detection import EyeDetector
 from detection.head_pose import HeadPoseDetector
@@ -62,6 +63,7 @@ def create_app():
     app.register_blueprint(alerts_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(screenshots_bp)
 
     # Serve screenshots
     @app.route("/screenshots/<path:filename>")
